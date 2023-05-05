@@ -104,7 +104,9 @@ const StakeContainer = () => {
       setPoolState(res);
     });
     getAnalyticsData(moment().subtract(1, 'day').format('YYYY-MM-DD'), moment().format('YYYY-MM-DD')).then((res) => {
-      setKdxSupply(res[res.length - 1].circulatingSupply.totalSupply);
+      if(res){
+        setKdxSupply(res[res.length - 1].circulatingSupply.totalSupply);
+      }
     });
   }, []);
 
@@ -453,8 +455,11 @@ const StakeContainer = () => {
       mobileStyle={{ paddingRight: theme().layout.mobilePadding, paddingLeft: theme().layout.mobilePadding }}
     >
       <Helmet>
-        <meta name="description" content="Accrue voting power for the Kaddex DAO while generating passive income." />
-        <title>Kaddex | Staking</title>
+        <meta
+          name="description"
+          content="Stake $KDX for voting power and DAO participation. Secure rewards while supporting project growth. Join the community now."
+        />
+        <title>eckoDEX | Stake</title>
       </Helmet>
       <FlexContainer className="w-100 justify-sb" style={{ marginBottom: 24 }}>
         <FlexContainer gap={16} mobileStyle={{ marginBottom: 16 }}>
@@ -505,9 +510,7 @@ const StakeContainer = () => {
           buttonLabel={pathname === ROUTE_STAKE ? 'stake' : 'unstake'}
           pendingAmount={(estimateUnstakeData && estimateUnstakeData['stake-record'] && estimateUnstakeData['stake-record']['pending-add']) || false}
           onClickMax={() =>
-            setInputAmount(
-              pathname !== ROUTE_UNSTAKE ? Number(kdxAccountBalance.toFixed(12)) : Number(estimateUnstakeData?.staked.toFixed(12)) || 0.0
-            )
+            setInputAmount(pathname !== ROUTE_UNSTAKE ? reduceBalance(kdxAccountBalance, 12) : reduceBalance(estimateUnstakeData?.staked, 12) || 0.0)
           }
           kdxAccountBalance={kdxAccountBalance}
           setKdxAmount={(value) => setInputAmount(value)}

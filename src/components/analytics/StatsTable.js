@@ -13,6 +13,7 @@ import CommonTable from '../shared/CommonTable';
 import { CryptoContainer, FlexContainer } from '../shared/FlexContainer';
 import GraphicPercentage from '../shared/GraphicPercentage';
 import { getAnalyticsTokenStatsData } from '../../api/kaddex-analytics';
+import {DecimalFormatted} from '../../components/shared/DecimalFormatted';
 
 const StatsTable = ({ verifiedActive }) => {
   const { themeMode } = useApplicationContext();
@@ -29,7 +30,7 @@ const StatsTable = ({ verifiedActive }) => {
         const tokensStatsData = await getAnalyticsTokenStatsData();
         for (const t of Object.values(pact.allTokens)) {
           const price = pact?.tokensUsdPrice && pact?.tokensUsdPrice[t?.name];
-          const tokenStats = tokensStatsData[t.code];
+          const tokenStats = tokensStatsData ? tokensStatsData[t.code] : undefined;
           data.push({
             ...t,
             price,
@@ -115,7 +116,7 @@ const renderColumns = (history, allTokens) => {
       sortBy: 'price',
       render: ({ item }) => (
         <ScalableCryptoContainer className="align-ce pointer h-100" onClick={() => history.push(ROUTE_TOKEN_INFO.replace(':token', item.name))}>
-          {humanReadableNumber(item.price, 3) !== '0.000' ? `$ ${humanReadableNumber(item.price, 3)}` : '<$ 0.001'}
+          <DecimalFormatted value={item.price} />
         </ScalableCryptoContainer>
       ),
     },

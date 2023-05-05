@@ -5,8 +5,8 @@ import Pact from 'pact-lang-api';
 // import { useInterval } from '../hooks/useInterval';
 import axios from 'axios';
 import { getTokenUsdPriceByName } from '../utils/token-utils';
-import { CHAIN_ID, creationTime, FEE, GAS_PRICE, NETWORK, KADDEX_NAMESPACE, KADDEX_API_URL } from '../constants/contextConstants';
-import { useAccountContext, useNotificationContext, useWalletContext } from '.';
+import { CHAIN_ID, creationTime, FEE, GAS_PRICE, NETWORK, KADDEX_NAMESPACE } from '../constants/contextConstants';
+import { useNotificationContext, useWalletContext } from '.';
 import { fetchPrecision, getPairList } from '../api/pact';
 import tokenData, { pairsData, blacklistedTokenData } from '../constants/cryptoCurrencies';
 import { GAS_OPTIONS } from '../constants/gasConfiguration';
@@ -28,22 +28,19 @@ const initialNetworkGasData = {
 };
 
 export const PactProvider = (props) => {
-  const account = useAccountContext();
   const wallet = useWalletContext();
   const notificationContext = useNotificationContext();
 
   const [slippage, setSlippage] = useState(savedSlippage ? savedSlippage : 0.05);
   const [ttl, setTtl] = useState(savedTtl ? savedTtl : 600);
   const [pairReserve, setPairReserve] = useState('');
+  const [multihopsReserves, setMultihopsReserves] = useState(null);
+
   const [precision, setPrecision] = useState(false);
   const [polling, setPolling] = useState(false);
   const [pactCmd, setPactCmd] = useState(null);
 
   const [ratio, setRatio] = useState(NaN);
-  const [swapList, setSwapList] = useState([]);
-  const [offsetSwapList, setOffsetSwapList] = useState(0);
-  const [moreSwap, setMoreSwap] = useState(true);
-  const [loadingSwap, setLoadingSwap] = useState(false);
 
   const [tokensUsdPrice, setTokensUsdPrice] = useState(null);
 
@@ -54,7 +51,11 @@ export const PactProvider = (props) => {
   const [allPairs, setAllPairs] = useState(null);
   const [allTokens, setAllTokens] = useState(null);
 
+  const [isMultihopsSwap, setIsMultihopsSwap] = useState(false);
+
   const [kdaUsdPrice, setKdaUsdPrice] = useState(null);
+
+  const [multihopsCoinAmount, setMultihopsCoinAmount] = useState(null);
 
   const handleGasConfiguration = (key, value) => {
     setGasConfiguration((prev) => ({ ...prev, [key]: value }));
@@ -62,11 +63,7 @@ export const PactProvider = (props) => {
 
   const getNetworkGasData = async () => {
     try {
-      let response = await axios.get(`${KADDEX_API_URL}/api/mempool/getgasdata`, {
-        params: {
-          chain: CHAIN_ID,
-        },
-      });
+      let response = await axios.get(`${process.env.REACT_APP_KADDEX_STATS_API_URL}/mempool/get-gas-data`);
       setNetworkGasData(response.data);
     } catch (err) {}
   };
@@ -179,10 +176,18 @@ export const PactProvider = (props) => {
   // useInterval(updateTokenUsdPrice, 25000);
 
   useEffect(() => {
-    if (pairReserve) {
-      pairReserve['token0'] === 0 && pairReserve['token1'] === 0 ? setRatio(0) : setRatio(pairReserve['token0'] / pairReserve['token1']);
-    } else setRatio(NaN);
-  }, [pairReserve]);
+    if (pairReserve || multihopsReserves) {
+      if (isMultihopsSwap) {
+        const ratioFromToken = multihopsReserves.fromData.reserves.coin / multihopsReserves.fromData.reserves.token;
+        const ratioToToken = multihopsReserves.toData.reserves.coin / multihopsReserves.toData.reserves.token;
+        setRatio(ratioToToken / ratioFromToken);
+      } else {
+        pairReserve['token0'] === 0 && pairReserve['token1'] === 0 ? setRatio(0) : setRatio(pairReserve['token0'] / pairReserve['token1']);
+      }
+    } else {
+      setRatio(NaN);
+    }
+  }, [pairReserve, multihopsReserves]);
 
   useEffect(() => {
     if (!wallet.wallet) {
@@ -190,91 +195,9 @@ export const PactProvider = (props) => {
     }
   }, []);
 
-  const getEventsSwapList = async () => {
-    setSwapList([]);
-    const limit = 50;
-    try {
-      if (account.account.account) {
-        setLoadingSwap(true);
-        let response = await axios.get('https://estats.chainweb.com/txs/events', {
-          params: {
-            search: account.account.account,
-            name: `${KADDEX_NAMESPACE}.exchange.SWAP`,
-            offset: offsetSwapList,
-            limit: limit,
-          },
-        });
-
-        if (Object.values(response?.data).length < limit) setMoreSwap(false);
-        if (Object.values(response?.data).length !== 0) {
-          let swap = Object.values(response?.data).map((s) => ({
-            ...s,
-            tokenA: s.params[3],
-            amountA: s.params[2],
-            tokenB: s.params[5],
-            amountB: s.params[4],
-          }));
-          if (swap.length !== 0) {
-            setSwapList(swap);
-          } else setSwapList({ error: 'No swaps found' });
-        } else {
-          if (process.env.REACT_APP_KDA_NETWORK_TYPE === 'development') {
-            setSwapList({ error: 'This Devnet environment does not have a block explorer.' });
-          } else {
-            setSwapList({ error: 'No movement was performed' });
-          }
-        }
-        setLoadingSwap(false);
-      } else {
-        setSwapList({ error: 'Connect your wallet to view the swap history' });
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const getMoreEventsSwapList = async () => {
-    const limit = 50;
-    let offset = offsetSwapList + limit;
-
-    try {
-      if (account.account.account) {
-        setLoadingSwap(true);
-        let response = await axios.get('https://estats.chainweb.com/txs/events', {
-          params: {
-            search: account.account.account,
-            name: `${KADDEX_NAMESPACE}.exchange.SWAP`,
-            offset: offset,
-            limit: limit,
-          },
-        });
-        let swap = Object.values(response?.data).map((s) => ({
-          ...s,
-          tokenA: s.params[3],
-          amountA: s.params[2],
-          tokenB: s.params[5],
-          amountB: s.params[4],
-        }));
-        if (swap.length !== 0) {
-          const newResults = [...swapList, ...swap];
-          if (swap.length < limit) {
-            setMoreSwap(false);
-          }
-          setSwapList(newResults);
-        } else {
-          setMoreSwap(false);
-        }
-        setLoadingSwap(false);
-      } else {
-        setSwapList({ error: 'Connect your wallet to view the swap history' });
-      }
-      setOffsetSwapList(offset);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
   const getReserves = async (token0, token1) => {
+    setIsMultihopsSwap(false);
+    setMultihopsReserves(null);
     try {
       let data = await Pact.fetch.local(
         {
@@ -297,7 +220,58 @@ export const PactProvider = (props) => {
           token1: data.result.data[1].decimal ? data.result.data[1].decimal : data.result.data[1],
         });
       } else {
-        setPairReserve({});
+        setPairReserve('');
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const getReservesMultihops = async (token0, token1) => {
+    setPairReserve('');
+    try {
+      let data = await Pact.fetch.local(
+        {
+          pactCode: `
+          (use ${KADDEX_NAMESPACE}.exchange)
+          (let*
+            (
+              (p (get-pair coin ${token0}))
+              (reserveA (reserve-for p coin))
+              (reserveB (reserve-for p ${token0}))
+              (pairAccount (at 'account p))
+
+              (p2 (get-pair coin ${token1}))
+              (reserveC (reserve-for p2 coin))
+              (reserveD (reserve-for p2 ${token1}))
+              (pairAccount2 (at 'account p2))
+            )[reserveA reserveB reserveC reserveD pairAccount pairAccount2])
+           `,
+          meta: Pact.lang.mkMeta('account', CHAIN_ID, GAS_PRICE, 150000, creationTime(), 600),
+        },
+        NETWORK
+      );
+      if (data.result.status === 'success') {
+        setMultihopsReserves({
+          fromData: {
+            code: token0,
+            reserves: {
+              coin: data.result.data[0].decimal ? data.result.data[0].decimal : data.result.data[0],
+              token: data.result.data[1].decimal ? data.result.data[1].decimal : data.result.data[1],
+            },
+            pairAccount: data.result.data[4],
+          },
+          toData: {
+            code: token1,
+            reserves: {
+              coin: data.result.data[2].decimal ? data.result.data[2].decimal : data.result.data[2],
+              token: data.result.data[3].decimal ? data.result.data[3].decimal : data.result.data[3],
+            },
+            pairAccount: data.result.data[5],
+          },
+        });
+      } else {
+        setMultihopsReserves(null);
       }
     } catch (e) {
       console.log(e);
@@ -365,26 +339,122 @@ export const PactProvider = (props) => {
 
   //COMPUTE_OUT
   var computeOut = function (amountIn) {
-    let reserveOut = Number(pairReserve['token1']);
-    let reserveIn = Number(pairReserve['token0']);
-    let numerator = Number(amountIn * (1 - FEE) * reserveOut);
-    let denominator = Number(reserveIn + amountIn * (1 - FEE));
-    return numerator / denominator;
+    if (isMultihopsSwap) {
+      return computeOutMultihopsHandler(amountIn);
+    } else {
+      let reserveOut = Number(pairReserve['token1']);
+      let reserveIn = Number(pairReserve['token0']);
+      let numerator = Number(amountIn * (1 - FEE) * reserveOut);
+      let denominator = Number(reserveIn + amountIn * (1 - FEE));
+      return numerator / denominator;
+    }
   };
 
   //COMPUTE_IN
   var computeIn = function (amountOut) {
-    let reserveOut = Number(pairReserve['token1']);
-    let reserveIn = Number(pairReserve['token0']);
-    let numerator = Number(reserveIn * amountOut);
-    let denominator = Number((reserveOut - amountOut) * (1 - FEE));
+    if (isMultihopsSwap) {
+      return computeInMultihopsHandler(amountOut);
+    } else {
+      let reserveOut = Number(pairReserve['token1']);
+      let reserveIn = Number(pairReserve['token0']);
+      let numerator = Number(reserveIn * amountOut);
+      let denominator = Number((reserveOut - amountOut) * (1 - FEE));
+      // round up the last digit
+      return numerator / denominator;
+    }
+  };
+
+  //COMPUTE_OUT_MULTIHOPS_HANDLER
+  var computeOutMultihopsHandler = function (amountIn) {
+    var newAmountIn = computeOutMultihops(
+      amountIn,
+      multihopsReserves.fromData.reserves.token /* reserveIn */,
+      multihopsReserves.fromData.reserves.coin /* reserveOut */
+    );
+    var amountOut = computeOutMultihops(
+      newAmountIn,
+      multihopsReserves.toData.reserves.coin /* reserveIn */,
+      multihopsReserves.toData.reserves.token /* reserveOut */
+    );
+
+    return amountOut;
+  };
+
+  //COMPUTE_IN_MULTIHOPS_HANDLER
+  var computeInMultihopsHandler = function (amountOut) {
+    var newAmountOut = computeInMultihops(
+      amountOut,
+      multihopsReserves.fromData.reserves.token /* reserveIn */,
+      multihopsReserves.fromData.reserves.coin /* reserveOut */
+    );
+    var amountIn = computeInMultihops(
+      newAmountOut,
+      multihopsReserves.toData.reserves.coin /* reserveIn */,
+      multihopsReserves.toData.reserves.token /* reserveOut */
+    );
+    return amountIn;
+  };
+
+  //COMPUTE_OUT_MULTIHOPS
+  var computeOutMultihops = function (amountIn, reserveIn, reserveOut) {
+    const reserveInNumber = Number(reserveIn);
+    const reserveOutNumber = Number(reserveOut);
+
+    let numerator = Number(amountIn * (1 - FEE) * reserveOutNumber);
+    let denominator = Number(reserveInNumber + amountIn * (1 - FEE));
+    return numerator / denominator;
+  };
+
+  //COMPUTE_IN_MULTIHOPS
+  var computeInMultihops = function (amountOut, reserveIn, reserveOut) {
+    const reserveInNumber = Number(reserveIn);
+    const reserveOutNumber = Number(reserveOut);
+    let numerator = Number(reserveInNumber * amountOut);
+    let denominator = Number((reserveOutNumber - amountOut) * (1 - FEE));
     // round up the last digit
     return numerator / denominator;
   };
 
+  //COMPUTE_PRICE_IMPACT
   function computePriceImpact(amountIn, amountOut) {
-    const reserveOut = Number(pairReserve['token1']);
-    const reserveIn = Number(pairReserve['token0']);
+    if (isMultihopsSwap) {
+      return computePriceImpactMultihopsHandler(amountIn, amountOut);
+    } else {
+      const reserveOut = Number(pairReserve['token1']);
+      const reserveIn = Number(pairReserve['token0']);
+      const midPrice = reserveOut / reserveIn;
+      const exactQuote = amountIn * midPrice;
+      const slippage = (exactQuote - amountOut) / exactQuote;
+      return slippage;
+    }
+  }
+
+  //COMPUTE_PRICE_IMPACT_MULTIHOPS_HANDLER
+  function computePriceImpactMultihopsHandler(amountIn, amountOut) {
+    const coinAmount = computeOutMultihops(
+      amountIn,
+      multihopsReserves.fromData.reserves.token /* reserveIn */,
+      multihopsReserves.fromData.reserves.coin /* reserveOut */
+    );
+    setMultihopsCoinAmount(coinAmount);
+    const priceImpactFirstPair = computePriceImpactMultihops(
+      amountIn,
+      coinAmount,
+      multihopsReserves.fromData.reserves.token /* reserveIn */,
+      multihopsReserves.fromData.reserves.coin /* reserveOut */
+    );
+    const priceImpactSecondPair = computePriceImpactMultihops(
+      coinAmount,
+      amountOut,
+      multihopsReserves.toData.reserves.coin /* reserveIn */,
+      multihopsReserves.toData.reserves.token /* reserveOut */
+    );
+    const priceImpact = priceImpactFirstPair >= priceImpactSecondPair ? priceImpactFirstPair : priceImpactSecondPair;
+    return priceImpact;
+  }
+
+  //COMPUTE_PRICE_IMPACT_MULTIHOPS
+  function computePriceImpactMultihops(amountIn, amountOut, reserveIn, reserveOut) {
     const midPrice = reserveOut / reserveIn;
     const exactQuote = amountIn * midPrice;
     const slippage = (exactQuote - amountOut) / exactQuote;
@@ -396,7 +466,11 @@ export const PactProvider = (props) => {
   }
 
   function realizedLPFee(numHops = 1) {
-    return 1 - (1 - FEE) * numHops;
+    if (isMultihopsSwap) {
+      numHops = 2;
+    }
+    const res = 1 - (1 - FEE * numHops);
+    return res;
   }
 
   const contextValues = {
@@ -417,11 +491,8 @@ export const PactProvider = (props) => {
     precision,
     setPrecision,
     fetchPrecision,
-    swapList,
     allPairs,
     allTokens,
-    getMoreEventsSwapList,
-    moreSwap,
     polling,
     setPolling,
     ratio,
@@ -430,17 +501,19 @@ export const PactProvider = (props) => {
     getRatio,
     getRatio1,
     share,
+    isMultihopsSwap,
+    setIsMultihopsSwap,
     pairReserve,
+    multihopsReserves,
     getReserves,
+    getReservesMultihops,
     txSend,
     computePriceImpact,
     priceImpactWithoutFee,
     computeOut,
     computeIn,
-    setMoreSwap,
-    loadingSwap,
-    getEventsSwapList,
     kdaUsdPrice,
+    multihopsCoinAmount,
   };
   return <PactContext.Provider value={contextValues}>{props.children}</PactContext.Provider>;
 };

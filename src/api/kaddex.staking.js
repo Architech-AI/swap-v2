@@ -42,7 +42,7 @@ export const getAddStakeCommand = async (verifiedAccount, amountToStake, gasStat
   if (decimalPlaces > tokenData['KDX'].precision) {
     decimalPlaces = tokenData['KDX'].precision;
   }
-  const pactCode = `(${KADDEX_NAMESPACE}.staking.stake "${account.account}" ${parsedAmount.toFixed(decimalPlaces || 2)})`;
+  const pactCode = `(${KADDEX_NAMESPACE}.staking.stake "${account.account}" (read-decimal 'amount))`;
   return {
     pactCode,
     caps: [
@@ -53,9 +53,12 @@ export const getAddStakeCommand = async (verifiedAccount, amountToStake, gasStat
         'kaddex.skdx',
         account.account,
         account.account,
-        parsedAmount,
+        reduceBalance(parsedAmount, decimalPlaces),
       ]),
-      Pact.lang.mkCap('stake capability', 'staking', `${KADDEX_NAMESPACE}.staking.STAKE`, [account.account, parsedAmount]),
+      Pact.lang.mkCap('stake capability', 'staking', `${KADDEX_NAMESPACE}.staking.STAKE`, [
+        account.account,
+        reduceBalance(parsedAmount, decimalPlaces),
+      ]),
     ],
     sender: gasStation ? 'kaddex-free-gas' : account.account,
     gasLimit: Number(gasLimit),
@@ -64,6 +67,7 @@ export const getAddStakeCommand = async (verifiedAccount, amountToStake, gasStat
     ttl: 600,
     envData: {
       'user-ks': account.guard,
+      amount: reduceBalance(parsedAmount, decimalPlaces),
     },
     signingPubKey: account.guard.keys[0],
     networkId: NETWORKID,
@@ -149,7 +153,7 @@ export const getRollupAndUnstakeCommand = async (verifiedAccount, amountToUnstak
   }
   const pactCode = `
   (${KADDEX_NAMESPACE}.staking.rollup "${account.account}")
-  (${KADDEX_NAMESPACE}.staking.unstake "${account.account}" ${parsedAmount.toFixed(decimalPlaces || 2)})
+  (${KADDEX_NAMESPACE}.staking.unstake "${account.account}" (read-decimal 'amount))
   `;
   return {
     pactCode,
@@ -159,13 +163,13 @@ export const getRollupAndUnstakeCommand = async (verifiedAccount, amountToUnstak
         'kaddex.skdx',
         account.account,
         account.account,
-        reduceBalance(parsedAmount.toFixed(decimalPlaces || 2), decimalPlaces || 2),
+        reduceBalance(parsedAmount, decimalPlaces),
       ]),
       Pact.lang.mkCap('unwrap capability for penalty', 'unwrapping skdx for penalty', `${KADDEX_NAMESPACE}.kdx.UNWRAP`, [
         'kaddex.skdx',
         account.account,
         'kdx-staking',
-        reduceBalance(parsedAmount.toFixed(decimalPlaces || 2), decimalPlaces || 2),
+        reduceBalance(parsedAmount, decimalPlaces),
       ]),
       Pact.lang.mkCap('unstake capability', 'unstaking', `${KADDEX_NAMESPACE}.staking.UNSTAKE`, [account.account]),
       ...(gasStation
@@ -179,6 +183,7 @@ export const getRollupAndUnstakeCommand = async (verifiedAccount, amountToUnstak
     ttl: 600,
     envData: {
       'user-ks': account.guard,
+      amount: reduceBalance(parsedAmount, decimalPlaces),
     },
     signingPubKey: account.guard.keys[0],
     networkId: NETWORKID,
@@ -242,7 +247,7 @@ export const getRollupClaimAndUnstakeCommand = async (verifiedAccount, amountToU
   const pactCode = `
   (${KADDEX_NAMESPACE}.staking.rollup "${account.account}")
   (${KADDEX_NAMESPACE}.staking.claim "${account.account}")
-  (${KADDEX_NAMESPACE}.staking.unstake "${account.account}" ${parsedAmount.toFixed(decimalPlaces || 2)})
+  (${KADDEX_NAMESPACE}.staking.unstake "${account.account}" (read-decimal 'amount))
   `;
   return {
     pactCode,
@@ -256,13 +261,13 @@ export const getRollupClaimAndUnstakeCommand = async (verifiedAccount, amountToU
         'kaddex.skdx',
         account.account,
         account.account,
-        reduceBalance(parsedAmount.toFixed(decimalPlaces || 2), decimalPlaces || 2),
+        reduceBalance(parsedAmount, decimalPlaces),
       ]),
       Pact.lang.mkCap('unwrap capability for penalty', 'unwrapping skdx for penalty', `${KADDEX_NAMESPACE}.kdx.UNWRAP`, [
         'kaddex.skdx',
         account.account,
         'kdx-staking',
-        reduceBalance(parsedAmount.toFixed(decimalPlaces || 2), decimalPlaces || 2),
+        reduceBalance(parsedAmount, decimalPlaces),
       ]),
       Pact.lang.mkCap('unstake capability', 'unstaking', `${KADDEX_NAMESPACE}.staking.UNSTAKE`, [account.account]),
     ],
@@ -273,6 +278,7 @@ export const getRollupClaimAndUnstakeCommand = async (verifiedAccount, amountToU
     ttl: 600,
     envData: {
       'user-ks': account.guard,
+      amount: reduceBalance(parsedAmount, decimalPlaces),
     },
     signingPubKey: account.guard.keys[0],
     networkId: NETWORKID,

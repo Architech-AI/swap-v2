@@ -18,7 +18,8 @@ import {
   ROUTE_LIQUIDITY_POOLS,
   ROUTE_LIQUIDITY_ADD_LIQUIDITY_SINGLE_SIDED,
   ROUTE_LIQUIDITY_ADD_LIQUIDITY_DOUBLE_SIDED,
-  ROUTE_LIQUIDITY_REMOVE_LIQUIDITY,
+  ROUTE_LIQUIDITY_REMOVE_LIQUIDITY_SINGLE_SIDED,
+  ROUTE_LIQUIDITY_REMOVE_LIQUIDITY_DOUBLE_SIDED,
   ROUTE_STAKE,
   ROUTE_UNSTAKE,
   ROUTE_DAO,
@@ -26,8 +27,9 @@ import {
   ROUTE_LIQUIDITY_REWARDS,
   ROUTE_LIQUIDITY_CREATE_PAIR,
   ROUTE_ANALYTICS_KDX,
-  ROUTE_ANALYTICS_STATS,
   ROUTE_TOKEN_INFO,
+  ROUTE_ANALYTICS_STATS,
+  ROUTE_POOL_INFO,
 } from './routes';
 import SwapHistoryContainer from '../containers/SwapHistoryContainer';
 import { useGameEditionContext } from '../contexts';
@@ -37,6 +39,7 @@ import AddLiquidityContainer from '../components/liquidity/AddLiquidityContainer
 import RemoveLiquidityContainer from '../containers/RemoveLiquidityContainer';
 import StakeContainer from '../containers/StakeContainer';
 import TokenInfoContainer from '../containers/TokenInfoContainer';
+import PoolInfoContainer from '../containers/PoolInfoContainer';
 import CreatePairContainer from '../components/liquidity/CreatePairContainer';
 
 export default () => {
@@ -67,14 +70,16 @@ export default () => {
               component={AddLiquidityContainer}
             />
             <Route exact path={[ROUTE_LIQUIDITY_CREATE_PAIR]} component={CreatePairContainer} />
-            <Route exact path={ROUTE_LIQUIDITY_REMOVE_LIQUIDITY} component={RemoveLiquidityContainer} />
+            <Route
+              exact
+              path={[ROUTE_LIQUIDITY_REMOVE_LIQUIDITY_SINGLE_SIDED, ROUTE_LIQUIDITY_REMOVE_LIQUIDITY_DOUBLE_SIDED]}
+              component={RemoveLiquidityContainer}
+            />
             <Route exact path={[ROUTE_DAO, ROUTE_DAO_PROPOSAL]} component={DaoContainer} />
             <Route exact path={[ROUTE_ANALYTICS, ROUTE_ANALYTICS_KDX, ROUTE_ANALYTICS_STATS]} component={AnalyticsContainer} />
             <Route exact path={[ROUTE_STAKE, ROUTE_UNSTAKE]} component={StakeContainer} />
             <Route exact path={ROUTE_TOKEN_INFO} component={TokenInfoContainer} />
-            {/*
-             Remember to delete
-            <Route exact path={ROUTE_BUY_CRYPTO} component={BuyCryptoContainer} /> */}
+            <Route exact path={ROUTE_POOL_INFO} component={PoolInfoContainer} />
           </Switch>
         )}
       </Layout>
